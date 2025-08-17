@@ -1,6 +1,6 @@
 // /src/components/Navbar.jsx
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import CartWidget from "./CartWidget.jsx";
 import Logo from "../assets/img/LOGO.png";
 import { useAuth } from "../contexts/AuthContext";
@@ -10,49 +10,71 @@ export default function Navbar() {
   const navigate = useNavigate();
   const location = useLocation();
 
-  // fallback por si el Provider no está montado todavía
+  // Bootstrap Collapse ref
+  const collapseEl = useRef(null);
+  const bsCollapseRef = useRef(null);
+
+  // Auth (fallback por si el provider no está montado aún)
   const auth = (typeof useAuth === "function" ? useAuth() : null) || {};
   const { user, logout } = auth;
+  const firstName = (user?.nombre || "").split(" ")[0];
 
+  // Instanciar collapse una vez
+  useEffect(() => {
+    if (collapseEl.current && window.bootstrap?.Collapse) {
+      bsCollapseRef.current = window.bootstrap.Collapse.getOrCreateInstance(
+        collapseEl.current,
+        { toggle: false }
+      );
+    }
+  }, []);
+
+  const closeNav = () => {
+    // Cierra por API y como fallback quita la clase
+    try { bsCollapseRef.current?.hide(); } catch {}
+    collapseEl.current?.classList?.remove("show");
+  };
+
+  // Actualizar query del buscador
   useEffect(() => {
     const q = new URLSearchParams(location.search).get("q") || "";
     setQuery(q);
   }, [location.search]);
 
-  // ✅ OPCIONAL: cerrar el menú hamburguesa cuando cambio de ruta
-  useEffect(() => {
-    const el = document.getElementById("nav");
-    if (!el) return;
-    const collapse = window.bootstrap?.Collapse?.getOrCreateInstance(el);
-    collapse?.hide();
-  }, [location.pathname]);
+  // Cierra al cambiar de ruta
+  useEffect(() => { closeNav(); }, [location.pathname]);
+
+  // —— helpers de navegación que además cierran el menú ——
+  const go = (path) => (e) => {
+    e.preventDefault();
+    navigate(path);
+    closeNav();
+  };
 
   const onSubmit = (e) => {
     e.preventDefault();
     navigate(`/?q=${encodeURIComponent(query)}`);
+    closeNav();
   };
 
   const onLogout = async () => {
-    try {
-      await logout?.();
-      navigate("/");
-    } catch {}
+    try { await logout?.(); navigate("/"); } finally { closeNav(); }
   };
-
-  const firstName = (user?.nombre || "").split(" ")[0];
 
   return (
     <nav className="navbar navbar-expand-lg navbar-light bg-white shadow-sm sticky-top">
       <div className="container">
-        <Link className="navbar-brand d-flex align-items-center" to="/">
+        {/* LOGO */}
+        <a href="/" onClick={go("/")} className="navbar-brand d-flex align-items-center">
           <img
             src={Logo}
             alt="Logo Delfina Store"
             className="me-2"
             style={{ width: 40, height: 40, objectFit: "contain" }}
           />
-        </Link>
+        </a>
 
+        {/* Toggler */}
         <button
           className="navbar-toggler"
           type="button"
@@ -65,20 +87,28 @@ export default function Navbar() {
           <span className="navbar-toggler-icon"></span>
         </button>
 
-        <div className="collapse navbar-collapse" id="nav">
-          <ul className="navbar-nav me-auto mb-2 mb-lg-0">
+        {/* Collapse */}
+        <div className="collapse navbar-collapse" id="nav" ref={collapseEl}>
+          {/* Links */}
+          <ul className="navbar-nav me-auto mb-3 mb-lg-0">
             <li className="nav-item">
-              <Link className="nav-link" to="/">Home</Link>
+              <Link className="nav-link" to="/" onClick={go("/")}>Home</Link>
             </li>
             <li className="nav-item">
-              <Link className="nav-link" to="/nosotros">Nosotros</Link>
+              <Link className="nav-link" to="/nosotros" onClick={go("/nosotros")}>Nosotros</Link>
             </li>
             <li className="nav-item">
-              <Link className="nav-link" to="/contacto">Contacto</Link>
+              <Link className="nav-link" to="/contacto" onClick={go("/contacto")}>Contacto</Link>
             </li>
           </ul>
 
-          <form className="d-flex me-3" role="search" onSubmit={onSubmit}>
+          {/* Buscador */}
+          <form
+            className="d-flex my-3 my-lg-0 w-100 w-lg-auto"
+            role="search"
+            onSubmit={onSubmit}
+            style={{ maxWidth: 360 }}
+          >
             <input
               className="form-control"
               type="search"
@@ -88,27 +118,33 @@ export default function Navbar() {
             />
           </form>
 
-          {user ? (
-            <div className="d-flex align-items-center gap-2 me-3">
-              <span className="text-muted small d-none d-lg-inline">
-                Hola, <strong>{firstName}</strong>
-              </span>
-              <button className="btn btn-outline-secondary btn-sm" onClick={onLogout}>
-                Salir
-              </button>
-            </div>
-          ) : (
-            <div className="d-flex align-items-center gap-2 me-3">
-              <Link className="btn btn-outline-primary btn-sm" to="/login">
-                Ingresar
-              </Link>
-              <Link className="btn btn-primary btn-sm" to="/registro">
-                Crear cuenta
-              </Link>
-            </div>
-          )}
+          {/* Acciones + carrito */}
+          <div className="d-grid gap-2 mt-3 mt-lg-0 d-lg-flex align-items-center ms-lg-3">
+            {user ? (
+              <>
+                <span className="text-muted small d-none d-lg-inline">
+                  Hola, <strong>{firstName}</strong>
+                </span>
+                <button className="btn btn-outline-secondary" onClick={onLogout}>
+                  Salir
+                </button>
+              </>
+            ) : (
+              <>
+                <Link className="btn btn-outline-primary" to="/login" onClick={go("/login")}>
+                  Ingresar
+                </Link>
+                <Link className="btn btn-primary" to="/registro" onClick={go("/registro")}>
+                  Crear cuenta
+                </Link>
+              </>
+            )}
 
-          <CartWidget />
+            {/* Carrito: también cierra el menú al tocarlo */}
+            <div className="d-flex justify-content-lg-end" onClick={closeNav}>
+              <CartWidget />
+            </div>
+          </div>
         </div>
       </div>
     </nav>
